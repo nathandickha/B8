@@ -14,7 +14,7 @@ const SPA_THROAT_ALONG_PAD = 0.12; // extend throat clip past spa extents along 
 const SPA_THROAT_WIDTH_EXTRA = 0.10; // widen throat clip across the wall opening
 
 // Stable throat controls
-const SPA_THROAT_YELLOW_LENGTH_SHRINK = 1.05; // shorten coping cut along wall per side
+const SPA_THROAT_YELLOW_LENGTH_SHRINK = 0.10; // shorten coping cut along wall per side
 const SPA_THROAT_BLUE_LENGTH_SHRINK = 0.00;   // shorten wall cut along wall per side
 
 // Debug / clip Z controls
