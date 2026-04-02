@@ -440,56 +440,55 @@ function updateSpaVoidDebug(scene, ground, poolGroup, spaGroup, holePts = null) 
     );
   }
 
-  // 3) Pool throat / wall clip region (yellow + blue duplicate with independent controls)
-  const throat = getSpaWallThroatClipBox(poolGroup, spaGroup, 0.01);
-  if (throat) {
-    const poolTopZ = getPoolCopingTopZ(poolGroup, spaGroup) ?? 0.0;
-    const copingUnderZ = getPoolCopingUndersideZ(poolGroup, spaGroup) ?? poolTopZ;
+// 3) Pool throat / wall clip region (yellow + blue duplicate with independent controls)
+const throat = getSpaWallThroatClipBox(poolGroup, spaGroup, 0.01);
+if (throat) {
+  const poolTopZ = getPoolCopingTopZ(poolGroup, spaGroup) ?? 0.0;
+  const copingUnderZ = getPoolCopingUndersideZ(poolGroup, spaGroup) ?? poolTopZ;
 
-    const throatSizeX = Math.max(0.01, throat.maxX - throat.minX);
-    const throatSizeY = Math.max(0.01, throat.maxY - throat.minY);
-    const throatCenterX = (throat.minX + throat.maxX) * 0.5;
-    const throatCenterY = (throat.minY + throat.maxY) * 0.5;    // Yellow: coping-only debug volume. Match the actual coping clip thickness.
-    const yellowMinZ = copingUnderZ - 0.02;
-    const yellowMaxZ = poolTopZ + 0.02;
-      poolTopZ + SPA_THROAT_DEBUG_YELLOW_TOP_PAD,
-      spaGroup.position.z + Math.max(0.01, spaGroup.userData?.height || 0.01) * 0.5 + SPA_THROAT_DEBUG_YELLOW_TOP_PAD
-    );
-    const yellowCenter = new THREE.Vector3(
-      throatCenterX,
-      throatCenterY,
-      (yellowMinZ + yellowMaxZ) * 0.5
-    );
-    addDebugBox(
-      group,
-      throatSizeX,
-      throatSizeY,
-      Math.max(0.01, yellowMaxZ - yellowMinZ),
-      yellowCenter,
-      null,
-      SPA_THROAT_DEBUG_YELLOW_COLOR,
-      'SpaThroatClipDebug'
-    );
+  const throatSizeX = Math.max(0.01, throat.maxX - throat.minX);
+  const throatSizeY = Math.max(0.01, throat.maxY - throat.minY);
+  const throatCenterX = (throat.minX + throat.maxX) * 0.5;
+  const throatCenterY = (throat.minY + throat.maxY) * 0.5;
 
-    // Blue: top locked to coping underside / pool wall height.
-    const blueMaxZ = copingUnderZ + SPA_THROAT_DEBUG_BLUE_TOP_PAD;
-    const blueMinZ = copingUnderZ - SPA_THROAT_DEBUG_BLUE_DEPTH - SPA_THROAT_DEBUG_BLUE_BOTTOM_PAD;
-    const blueCenter = new THREE.Vector3(
-      throatCenterX,
-      throatCenterY,
-      (blueMinZ + blueMaxZ) * 0.5
-    );
-    addDebugBox(
-      group,
-      throatSizeX,
-      throatSizeY,
-      Math.max(0.01, blueMaxZ - blueMinZ),
-      blueCenter,
-      null,
-      SPA_THROAT_DEBUG_BLUE_COLOR,
-      'SpaThroatClipDebugUnderCoping'
-    );
-  }
+  // Yellow: coping-only debug volume. Match the actual coping clip thickness.
+  const yellowMinZ = copingUnderZ - 0.02;
+  const yellowMaxZ = poolTopZ + 0.02;
+  const yellowCenter = new THREE.Vector3(
+    throatCenterX,
+    throatCenterY,
+    (yellowMinZ + yellowMaxZ) * 0.5
+  );
+  addDebugBox(
+    group,
+    throatSizeX,
+    throatSizeY,
+    Math.max(0.01, yellowMaxZ - yellowMinZ),
+    yellowCenter,
+    null,
+    SPA_THROAT_DEBUG_YELLOW_COLOR,
+    'SpaThroatClipDebug'
+  );
+
+  // Blue: top locked to coping underside / pool wall height.
+  const blueMaxZ = copingUnderZ + SPA_THROAT_DEBUG_BLUE_TOP_PAD;
+  const blueMinZ = copingUnderZ - SPA_THROAT_DEBUG_BLUE_DEPTH - SPA_THROAT_DEBUG_BLUE_BOTTOM_PAD;
+  const blueCenter = new THREE.Vector3(
+    throatCenterX,
+    throatCenterY,
+    (blueMinZ + blueMaxZ) * 0.5
+  );
+  addDebugBox(
+    group,
+    throatSizeX,
+    throatSizeY,
+    Math.max(0.01, blueMaxZ - blueMinZ),
+    blueCenter,
+    null,
+    SPA_THROAT_DEBUG_BLUE_COLOR,
+    'SpaThroatClipDebugUnderCoping'
+  );
+}
 
   // 4) Actual spa body extents (green) for reference only
   const spaBox = new THREE.Box3().setFromObject(spaGroup);
