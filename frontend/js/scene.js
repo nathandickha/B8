@@ -11,26 +11,20 @@ const RAISED_SPA_CHANNEL_WALL_OFFSET = 0.45; // inner face of channel wall sits 
 const RAISED_SPA_THRESHOLD_Z = 0.05; // 50mm above pool/ground
 const SPA_GROUND_CLIP_MARGIN_REDUCTION = 0.10; // shrink magenta XY clip by 100mm per active side
 const SPA_THROAT_ALONG_PAD = 0.12; // extend yellow throat clip 100mm+ past spa extents along the wall
-const SPA_THROAT_WIDTH_EXTRA = 0.10;
+const SPA_THROAT_WIDTH_EXTRA = 0.10; // widen yellow throat clip by 100mm across the wall opening
 
-// =========================
-// SPA THROAT DEBUG CONTROLS (PATCHED)
-// =========================
+// Independent debug controls for the two throat void boxes shown in the scene.
+// Yellow = existing spa-top-referenced throat void.
 const SPA_THROAT_DEBUG_YELLOW_COLOR = 0xffdd00;
 const SPA_THROAT_DEBUG_YELLOW_DEPTH = 0.30;
 const SPA_THROAT_DEBUG_YELLOW_BOTTOM_PAD = 0.01;
 const SPA_THROAT_DEBUG_YELLOW_TOP_PAD = 0.01;
-const SPA_THROAT_DEBUG_YELLOW_ALONG_PAD = 0.07;
-const SPA_THROAT_DEBUG_YELLOW_EXTRA_ALONG_WALL = 0.05;
 
+// Blue = duplicate throat void locked to pool wall height / coping underside.
 const SPA_THROAT_DEBUG_BLUE_COLOR = 0x00b7ff;
-const SPA_THROAT_DEBUG_BLUE_DEPTH = 0.30;
+const SPA_THROAT_DEBUG_BLUE_DEPTH = 0.20;
 const SPA_THROAT_DEBUG_BLUE_BOTTOM_PAD = 0.01;
 const SPA_THROAT_DEBUG_BLUE_TOP_PAD = 0.01;
-const SPA_THROAT_DEBUG_BLUE_ALONG_PAD = 0.07;
-const SPA_THROAT_DEBUG_BLUE_EXTRA_ALONG_WALL = 0.10;
- // widen yellow throat clip by 100mm across the wall opening
-
 
 function getPoolFootprintWorldPts(poolGroup) {
   const outerPts = poolGroup?.userData?.outerPts;
@@ -264,6 +258,52 @@ function getAllPoolCopingMeshes(poolGroup) {
   return [];
 }
 
+function buildBulletproofCopingMeshSet(poolGroup) {
+  const set = new Set();
+  const direct = getAllPoolCopingMeshes(poolGroup);
+
+  // 1) Add direct coping segment refs and all descendant meshes.
+  direct.forEach((entry) => {
+    if (!entry) return;
+    if (entry.isMesh) set.add(entry);
+    entry.traverse?.((child) => {
+      if (child?.isMesh) set.add(child);
+    });
+  });
+
+  // 2) Fallback by naming / userData conventions.
+  poolGroup?.traverse?.((obj) => {
+    if (!obj?.isMesh) return;
+    const n = String(obj.name || '').toLowerCase();
+    if (n.includes('coping')) set.add(obj);
+    if (obj.userData?.isCoping || obj.userData?.coping === true) set.add(obj);
+  });
+
+  // 3) Fallback by shared material identity with known coping segments.
+  const copingMaterials = new Set();
+  direct.forEach((entry) => {
+    entry?.traverse?.((child) => {
+      if (!child?.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => { if (m) copingMaterials.add(m); });
+    });
+    if (entry?.isMesh) {
+      const mats = Array.isArray(entry.material) ? entry.material : [entry.material];
+      mats.forEach((m) => { if (m) copingMaterials.add(m); });
+    }
+  });
+
+  if (copingMaterials.size) {
+    poolGroup?.traverse?.((obj) => {
+      if (!obj?.isMesh) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      if (mats.some((m) => copingMaterials.has(m))) set.add(obj);
+    });
+  }
+
+  return set;
+}
+
 function getSpaPoolWallSamplePoint(poolGroup, spaGroup) {
   if (!spaGroup) return null;
   spaGroup.updateMatrixWorld?.(true);
@@ -446,31 +486,16 @@ function updateSpaVoidDebug(scene, ground, poolGroup, spaGroup, holePts = null) 
     );
   }
 
-  // 3) Pool throat / wall clip region (yellow + blue duplicate with independent XY/Z controls)
+  // 3) Pool throat / wall clip region (yellow + blue duplicate with independent controls)
   const throat = getSpaWallThroatClipBox(poolGroup, spaGroup, 0.01);
   if (throat) {
     const poolTopZ = getPoolCopingTopZ(poolGroup, spaGroup) ?? 0.0;
     const copingUnderZ = getPoolCopingUndersideZ(poolGroup, spaGroup) ?? poolTopZ;
 
-    const yellowThroat = buildThroatBoxWithOverrides(spaGroup, {
-      alongPad: SPA_THROAT_DEBUG_YELLOW_ALONG_PAD,
-      extraAlongWall: SPA_THROAT_DEBUG_YELLOW_EXTRA_ALONG_WALL
-    });
-
-    const blueThroat = buildThroatBoxWithOverrides(spaGroup, {
-      alongPad: SPA_THROAT_DEBUG_BLUE_ALONG_PAD,
-      extraAlongWall: SPA_THROAT_DEBUG_BLUE_EXTRA_ALONG_WALL
-    });
-
-    const yellowSizeX = Math.max(0.01, yellowThroat.maxX - yellowThroat.minX);
-    const yellowSizeY = Math.max(0.01, yellowThroat.maxY - yellowThroat.minY);
-    const yellowCenterX = (yellowThroat.minX + yellowThroat.maxX) * 0.5;
-    const yellowCenterY = (yellowThroat.minY + yellowThroat.maxY) * 0.5;
-
-    const blueSizeX = Math.max(0.01, blueThroat.maxX - blueThroat.minX);
-    const blueSizeY = Math.max(0.01, blueThroat.maxY - blueThroat.minY);
-    const blueCenterX = (blueThroat.minX + blueThroat.maxX) * 0.5;
-    const blueCenterY = (blueThroat.minY + blueThroat.maxY) * 0.5;
+    const throatSizeX = Math.max(0.01, throat.maxX - throat.minX);
+    const throatSizeY = Math.max(0.01, throat.maxY - throat.minY);
+    const throatCenterX = (throat.minX + throat.maxX) * 0.5;
+    const throatCenterY = (throat.minY + throat.maxY) * 0.5;
 
     // Yellow: top referenced to spa top / pool top logic.
     const yellowMinZ = poolTopZ - SPA_THROAT_DEBUG_YELLOW_DEPTH - SPA_THROAT_DEBUG_YELLOW_BOTTOM_PAD;
@@ -479,14 +504,14 @@ function updateSpaVoidDebug(scene, ground, poolGroup, spaGroup, holePts = null) 
       spaGroup.position.z + Math.max(0.01, spaGroup.userData?.height || 0.01) * 0.5 + SPA_THROAT_DEBUG_YELLOW_TOP_PAD
     );
     const yellowCenter = new THREE.Vector3(
-      yellowCenterX,
-      yellowCenterY,
+      throatCenterX,
+      throatCenterY,
       (yellowMinZ + yellowMaxZ) * 0.5
     );
     addDebugBox(
       group,
-      yellowSizeX,
-      yellowSizeY,
+      throatSizeX,
+      throatSizeY,
       Math.max(0.01, yellowMaxZ - yellowMinZ),
       yellowCenter,
       null,
@@ -498,14 +523,14 @@ function updateSpaVoidDebug(scene, ground, poolGroup, spaGroup, holePts = null) 
     const blueMaxZ = copingUnderZ + SPA_THROAT_DEBUG_BLUE_TOP_PAD;
     const blueMinZ = copingUnderZ - SPA_THROAT_DEBUG_BLUE_DEPTH - SPA_THROAT_DEBUG_BLUE_BOTTOM_PAD;
     const blueCenter = new THREE.Vector3(
-      blueCenterX,
-      blueCenterY,
+      throatCenterX,
+      throatCenterY,
       (blueMinZ + blueMaxZ) * 0.5
     );
     addDebugBox(
       group,
-      blueSizeX,
-      blueSizeY,
+      throatSizeX,
+      throatSizeY,
       Math.max(0.01, blueMaxZ - blueMinZ),
       blueCenter,
       null,
@@ -1070,8 +1095,11 @@ function getSpaWallThroatClipBox(poolGroup, spaGroup, pad = 0.01) {
 
   const insidePad = 0.05 + pad;
   const outsideDepth = 0.21 + pad;
-  const alongPad = SPA_THROAT_ALONG_PAD;
-  const extraAlongWall = SPA_THROAT_WIDTH_EXTRA;
+const SPA_THROAT_DEBUG_YELLOW_ALONG_PAD = 0.07;
+const SPA_THROAT_DEBUG_YELLOW_EXTRA_ALONG_WALL = 0.05;
+
+const SPA_THROAT_DEBUG_BLUE_ALONG_PAD = 0.07;
+const SPA_THROAT_DEBUG_BLUE_EXTRA_ALONG_WALL = 0.10;
 
   let minX = center.x - halfX;
   let maxX = center.x + halfX;
@@ -1122,7 +1150,10 @@ export function updatePoolWaterVoid(poolGroup, spaGroup) {
   const updatePoolGeometryClip = (spa) => {
     if (!poolGroup) return;
 
-    let planes = null;
+    let yellowPlanes = null; // coping void
+    let bluePlanes = null;   // pool wall void
+    let copingMeshSet = null;
+
     if (spa) {
       const sz = spa.position.z;
       const sh = Math.max(0.01, spa.userData?.height || 0.01);
@@ -1132,19 +1163,33 @@ export function updatePoolWaterVoid(poolGroup, spaGroup) {
 
       const { minX, maxX, minY, maxY } = clipBox;
       const poolTopZ = getPoolCopingTopZ(poolGroup, spa) ?? 0.0;
-      const wallVoidDepth = 0.30; // only void the first 300mm down from pool top
-      const minZ = poolTopZ - wallVoidDepth - pad;
-      const maxZ = Math.max(poolTopZ + pad, sz + sh * 0.5 + pad);
+      const copingUnderZ = getPoolCopingUndersideZ(poolGroup, spa) ?? (poolTopZ - 0.05);
 
-      // With clipIntersection=true, fragments inside this box are removed.
-      planes = [
+      // Yellow = coping only. Keep it tightly constrained to coping thickness.
+      const yellowMinZ = copingUnderZ - 0.02;
+      const yellowMaxZ = poolTopZ + 0.02;
+      yellowPlanes = [
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), minX),
         new THREE.Plane(new THREE.Vector3( 1, 0, 0), -maxX),
         new THREE.Plane(new THREE.Vector3( 0,-1, 0), minY),
         new THREE.Plane(new THREE.Vector3( 0, 1, 0), -maxY),
-        new THREE.Plane(new THREE.Vector3( 0, 0,-1), minZ),
-        new THREE.Plane(new THREE.Vector3( 0, 0, 1), -maxZ)
+        new THREE.Plane(new THREE.Vector3( 0, 0,-1), yellowMinZ),
+        new THREE.Plane(new THREE.Vector3( 0, 0, 1), -yellowMaxZ)
       ];
+
+      // Blue = pool wall below coping.
+      const blueMinZ = copingUnderZ - 0.30 - pad;
+      const blueMaxZ = copingUnderZ + 0.01;
+      bluePlanes = [
+        new THREE.Plane(new THREE.Vector3(-1, 0, 0), minX),
+        new THREE.Plane(new THREE.Vector3( 1, 0, 0), -maxX),
+        new THREE.Plane(new THREE.Vector3( 0,-1, 0), minY),
+        new THREE.Plane(new THREE.Vector3( 0, 1, 0), -maxY),
+        new THREE.Plane(new THREE.Vector3( 0, 0,-1), blueMinZ),
+        new THREE.Plane(new THREE.Vector3( 0, 0, 1), -blueMaxZ)
+      ];
+
+      copingMeshSet = buildBulletproofCopingMeshSet(poolGroup);
     }
 
     poolGroup.traverse((obj) => {
@@ -1155,6 +1200,7 @@ export function updatePoolWaterVoid(poolGroup, spaGroup) {
       if (typeof obj.userData?.setSimParams === "function") return;
 
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const planes = copingMeshSet?.has(obj) ? yellowPlanes : bluePlanes;
       mats.forEach((m) => applyClipToMaterial(m, planes));
     });
   };
@@ -1223,23 +1269,3 @@ window.__applyCopingFix = function(){
     removeCopingInsideThroat(window.__copingGroup, window.__throatBox);
   }
 };
-
-
-
-// =========================
-// HELPER
-// =========================
-function buildThroatBoxWithOverrides(spaGroup, params) {
-  const bbox = new THREE.Box3().setFromObject(spaGroup);
-  const center = bbox.getCenter(new THREE.Vector3());
-  const size = bbox.getSize(new THREE.Vector3());
-  const halfX = size.x / 2;
-  const halfY = size.y / 2;
-
-  return {
-    minX: center.x - halfX - params.alongPad - params.extraAlongWall,
-    maxX: center.x + halfX + params.alongPad + params.extraAlongWall,
-    minY: center.y - halfY - params.alongPad - params.extraAlongWall,
-    maxY: center.y + halfY + params.alongPad + params.extraAlongWall
-  };
-}
